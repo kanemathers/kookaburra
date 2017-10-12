@@ -106,7 +106,7 @@ func main() {
 	t, err := fetchTorrent(client, flag.Arg(0))
 
 	if err != nil {
-		log.Fatalf("adding magnet: %s", err)
+		log.Fatalf("fetching torrent: %s", err)
 	}
 
 	<-t.GotInfo()
