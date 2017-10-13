@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -67,10 +68,22 @@ type seekableTorrent struct {
 	*torrent.Reader
 
 	offset int64
+	length int64
 }
 
 func (self *seekableTorrent) Seek(off int64, whence int) (ret int64, err error) {
-	return self.Reader.Seek(self.offset+off, whence)
+	var pos int64
+
+	switch whence {
+	case io.SeekStart:
+		pos = self.offset + off
+	case io.SeekCurrent:
+		pos = off
+	case io.SeekEnd:
+		pos = (self.offset + self.length) - off
+	}
+
+	return self.Reader.Seek(pos, whence)
 }
 
 func main() {
@@ -125,7 +138,7 @@ func main() {
 	for {
 		fmt.Printf("File: ")
 
-		if _, err := fmt.Scanln(&choice); err != nil || choice > len(t.Files()) {
+		if _, err := fmt.Scanln(&choice); err != nil || choice < 0 || choice > len(t.Files()) {
 			fmt.Println("Invalid choice")
 		} else {
 			break
@@ -135,6 +148,7 @@ func main() {
 	st := &seekableTorrent{
 		Reader: t.NewReader(),
 		offset: t.Files()[choice].Offset(),
+		length: t.Files()[choice].Length(),
 	}
 
 	st.Reader.SetResponsive()
