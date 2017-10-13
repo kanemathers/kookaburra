@@ -89,6 +89,7 @@ func (self *seekableTorrent) Seek(off int64, whence int) (ret int64, err error) 
 func main() {
 	httpPort := flag.String("http", ":8080", "Address to bind on for HTTP connections")
 	dataDir := flag.String("data-dir", os.TempDir(), "Directory to store downloaded torrent data")
+	readahead := flag.Uint("readahead", 15, "Configure the number of megabytes ahead of a read that should be prioritized in preparation for further reads")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [torrent]\n", os.Args[0])
@@ -151,6 +152,7 @@ func main() {
 		length: t.Files()[choice].Length(),
 	}
 
+	st.Reader.SetReadahead(int64(*readahead) * 1024 * 1024)
 	st.Reader.SetResponsive()
 
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
