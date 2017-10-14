@@ -1,6 +1,18 @@
 # kookaburra
 
-Stream torrents to the media player of your choice
+Stream torrents to the media player of your choice.
+
+I had been using [popcorntime](https://popcorntime.sh) for a while for its
+torrent streaming abilities but it was very bloated for what I was using it
+for. It's an Electron app with a built in torrent browser and media player.
+None of which I needed.
+
+I then found [peerflix](https://github.com/mafintosh/peerflix) which is very
+similar to kookaburra but it's a Javascript/node.js app. I wasn't interested
+in installing node.js for one simple program.
+
+So kookaburra was born. Written in Go, it's a simple, single binary program
+to do one thing - stream torrents.
 
 ## Installation
 
