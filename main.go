@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -88,8 +89,9 @@ func (self *seekableTorrent) Seek(off int64, whence int) (ret int64, err error) 
 
 func main() {
 	httpPort := flag.String("http", ":8080", "Address to bind on for HTTP connections")
-	dataDir := flag.String("data-dir", os.TempDir(), "Directory to store downloaded torrent data")
+	workingDir := flag.String("dir", os.TempDir(), "Directory to store downloaded data")
 	readahead := flag.Uint("readahead", 15, "Configure the number of megabytes ahead of a read that should be prioritized in preparation for further reads")
+	cleanup := flag.Bool("cleanup", true, "Remove downloaded data on quit")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [torrent]\n", os.Args[0])
@@ -102,8 +104,18 @@ func main() {
 		log.Fatal("no torrent provided")
 	}
 
+	dataDir := path.Join(*workingDir, "kookaburra")
+
+	defer func() {
+		if *cleanup {
+			if err := os.RemoveAll(dataDir); err != nil {
+				log.Printf("cleaning up directory: %s\n", err)
+			}
+		}
+	}()
+
 	client, err := torrent.NewClient(&torrent.Config{
-		DataDir: *dataDir,
+		DataDir: dataDir,
 		DHTConfig: dht.ServerConfig{
 			StartingNodes: dht.GlobalBootstrapAddrs,
 		},
