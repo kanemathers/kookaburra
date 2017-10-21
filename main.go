@@ -15,6 +15,7 @@ func main() {
 	httpAddr := flag.String("http", ":8080", "Address to bind on for HTTP connections")
 	workingDir := flag.String("dir", os.TempDir(), "Directory to store downloaded data")
 	cleanup := flag.Bool("cleanup", true, "Remove downloaded data on quit")
+	chooseLargest := flag.Bool("largest", false, "Automatically play the largest file in the torrent")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [torrent]\n", os.Args[0])
@@ -43,7 +44,7 @@ func main() {
 		}
 	}()
 
-	client, err := NewClient(*workingDir)
+	client, err := NewClient(dataDir)
 
 	if err != nil {
 		log.Fatalf("creating client: %s\n", err)
@@ -59,28 +60,34 @@ func main() {
 		log.Fatalf("fetching torrent: %s", err)
 	}
 
-	fmt.Println("Found these files in the torrent. Select which one you'd like to stream:")
-	fmt.Println()
+	var file *SeekableFile
 
-	for i, file := range torrent.Files() {
-		fmt.Printf("    [%d] %s\n", i, file.DisplayPath())
-	}
+	if !*chooseLargest {
+		fmt.Println("Found these files in the torrent. Select which one you'd like to stream:")
+		fmt.Println()
 
-	fmt.Println()
-
-	var choice int
-
-	for {
-		fmt.Printf("File: ")
-
-		if _, err := fmt.Scanln(&choice); err != nil || choice < 0 || choice > len(torrent.Files()) {
-			fmt.Println("Invalid choice")
-		} else {
-			break
+		for i, file := range torrent.Files() {
+			fmt.Printf("    [%d] %s\n", i, file.DisplayPath())
 		}
-	}
 
-	file := torrent.Files()[choice]
+		fmt.Println()
+
+		var choice int
+
+		for {
+			fmt.Printf("File: ")
+
+			if _, err := fmt.Scanln(&choice); err != nil || choice < 0 || choice > len(torrent.Files()) {
+				fmt.Println("Invalid choice")
+			} else {
+				break
+			}
+		}
+
+		file = torrent.Files()[choice]
+	} else {
+		file = torrent.LargestFile()
+	}
 
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		http.ServeContent(writer, request, file.DisplayPath(), time.Now(), file)

@@ -48,3 +48,16 @@ func (self *Torrent) Files() []*SeekableFile {
 
 	return seekableFiles
 }
+
+func (self *Torrent) LargestFile() *SeekableFile {
+	files := self.Files()
+	largest := files[0]
+
+	for _, file := range files[1:] {
+		if file.Length() > largest.Length() {
+			largest = file
+		}
+	}
+
+	return largest
+}
