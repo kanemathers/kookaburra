@@ -109,7 +109,7 @@ func (self *Client) PercentageComplete() float64 {
 	return float64(self.torrent.BytesCompleted()) / float64(info.TotalLength()) * 100
 }
 
-func (self *Client) Render(httpPort string) {
+func (self *Client) Render(httpPort int, playAllFiles bool) {
 	var clear string
 
 	if runtime.GOOS == "windows" {
@@ -146,10 +146,14 @@ func (self *Client) Render(httpPort string) {
 			fmt.Printf("Download speed: %s\n", downloadSpeed)
 		}
 
-		if downloaded >= downloadBuffer {
-			fmt.Printf("\nOpen your media player and enter http://127.0.0.1:%s as the network address.\n", httpPort)
+		if !playAllFiles {
+			if downloaded >= downloadBuffer {
+				fmt.Printf("\nOpen your media player and enter http://127.0.0.1:%d as the network address.\n", httpPort)
+			} else {
+				fmt.Printf("\nBuffering start of movie. Please wait...\n")
+			}
 		} else {
-			fmt.Printf("\nBuffering start of movie. Please wait...\n")
+			fmt.Printf("\nLoad this M3U playlist into your media player http://127.0.0.1:%d/playlist.m3u\n", httpPort)
 		}
 	}
 }
