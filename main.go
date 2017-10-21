@@ -3,94 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path"
-	"strings"
 	"time"
-
-	"github.com/anacrolix/dht"
-	"github.com/anacrolix/torrent"
-	"github.com/anacrolix/torrent/metainfo"
-	"github.com/pkg/errors"
 )
 
-func fetchTorrent(client *torrent.Client, path string) (*torrent.Torrent, error) {
-	if strings.HasPrefix(path, "magnet:") {
-		t, err := client.AddMagnet(path)
-
-		if err != nil {
-			return nil, errors.Wrap(err, "adding torrent")
-		}
-
-		return t, nil
-	} else if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		response, err := http.Get(path)
-
-		if err != nil {
-			return nil, errors.Wrap(err, "downloading torrent file")
-		}
-
-		defer response.Body.Close()
-
-		metaInfo, err := metainfo.Load(response.Body)
-
-		if err != nil {
-			return nil, errors.Wrap(err, "loading metadata from torrent")
-		}
-
-		t, err := client.AddTorrent(metaInfo)
-
-		if err != nil {
-			return nil, errors.Wrap(err, "adding torrent")
-		}
-
-		return t, nil
-	} else {
-		metaInfo, err := metainfo.LoadFromFile(path)
-
-		if err != nil {
-			return nil, errors.Wrap(err, "loading torrent file from path")
-		}
-
-		t, err := client.AddTorrent(metaInfo)
-
-		if err != nil {
-			return nil, errors.Wrap(err, "adding torrent")
-		}
-
-		return t, nil
-	}
-}
-
-type seekableTorrent struct {
-	*torrent.Reader
-
-	offset int64
-	length int64
-}
-
-func (self *seekableTorrent) Seek(off int64, whence int) (ret int64, err error) {
-	var pos int64
-
-	switch whence {
-	case io.SeekStart:
-		pos = self.offset + off
-	case io.SeekCurrent:
-		pos = off
-	case io.SeekEnd:
-		pos = (self.offset + self.length) - off
-	}
-
-	return self.Reader.Seek(pos, whence)
-}
-
 func main() {
-	httpPort := flag.String("http", ":8080", "Address to bind on for HTTP connections")
+	httpAddr := flag.String("http", ":8080", "Address to bind on for HTTP connections")
 	workingDir := flag.String("dir", os.TempDir(), "Directory to store downloaded data")
-	readahead := flag.Uint("readahead", 15, "Configure the number of megabytes ahead of a read that should be prioritized in preparation for further reads")
 	cleanup := flag.Bool("cleanup", true, "Remove downloaded data on quit")
 
 	flag.Usage = func() {
@@ -104,6 +27,12 @@ func main() {
 		log.Fatal("no torrent provided")
 	}
 
+	_, httpPort, err := net.SplitHostPort(*httpAddr)
+
+	if err != nil {
+		log.Fatalf("invalid http address: %s\n", *httpAddr)
+	}
+
 	dataDir := path.Join(*workingDir, "kookaburra")
 
 	defer func() {
@@ -114,33 +43,26 @@ func main() {
 		}
 	}()
 
-	client, err := torrent.NewClient(&torrent.Config{
-		DataDir: dataDir,
-		DHTConfig: dht.ServerConfig{
-			StartingNodes: dht.GlobalBootstrapAddrs,
-		},
-	})
+	client, err := NewClient(*workingDir)
 
 	if err != nil {
-		log.Fatalf("creating client: %s", err)
+		log.Fatalf("creating client: %s\n", err)
 	}
 
 	defer client.Close()
 
 	fmt.Println("Fetching torrent...")
 
-	t, err := fetchTorrent(client, flag.Arg(0))
+	torrent, err := client.LoadTorrent(flag.Arg(0))
 
 	if err != nil {
 		log.Fatalf("fetching torrent: %s", err)
 	}
 
-	<-t.GotInfo()
-
 	fmt.Println("Found these files in the torrent. Select which one you'd like to stream:")
 	fmt.Println()
 
-	for i, file := range t.Files() {
+	for i, file := range torrent.Files() {
 		fmt.Printf("    [%d] %s\n", i, file.DisplayPath())
 	}
 
@@ -151,27 +73,20 @@ func main() {
 	for {
 		fmt.Printf("File: ")
 
-		if _, err := fmt.Scanln(&choice); err != nil || choice < 0 || choice > len(t.Files()) {
+		if _, err := fmt.Scanln(&choice); err != nil || choice < 0 || choice > len(torrent.Files()) {
 			fmt.Println("Invalid choice")
 		} else {
 			break
 		}
 	}
 
-	st := &seekableTorrent{
-		Reader: t.NewReader(),
-		offset: t.Files()[choice].Offset(),
-		length: t.Files()[choice].Length(),
-	}
-
-	st.Reader.SetReadahead(int64(*readahead) * 1024 * 1024)
-	st.Reader.SetResponsive()
+	file := torrent.Files()[choice]
 
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		http.ServeContent(writer, request, t.Files()[choice].DisplayPath(), time.Now(), st)
+		http.ServeContent(writer, request, file.DisplayPath(), time.Now(), file)
 	})
 
-	fmt.Printf("\nOpen your media player and enter http://127.0.0.1:8080 as the network address.\n")
+	fmt.Printf("\nOpen your media player and enter http://127.0.0.1:%s as the network address.\n", httpPort)
 
-	http.ListenAndServe(*httpPort, nil)
+	http.ListenAndServe(*httpAddr, nil)
 }
