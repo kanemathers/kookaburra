@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const downloadBuffer = 5 * 1024 * 1024
+
 func main() {
 	httpAddr := flag.String("http", ":8080", "Address to bind on for HTTP connections")
 	workingDir := flag.String("dir", os.TempDir(), "Directory to store downloaded data")
@@ -52,7 +54,7 @@ func main() {
 
 	defer client.Close()
 
-	fmt.Println("Fetching torrent...")
+	fmt.Printf("Fetching torrent...\n\n")
 
 	torrent, err := client.LoadTorrent(flag.Arg(0))
 
@@ -89,11 +91,11 @@ func main() {
 		file = torrent.LargestFile()
 	}
 
+	go client.Render(httpPort)
+
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		http.ServeContent(writer, request, file.DisplayPath(), time.Now(), file)
 	})
-
-	fmt.Printf("\nOpen your media player and enter http://127.0.0.1:%s as the network address.\n", httpPort)
 
 	http.ListenAndServe(*httpAddr, nil)
 }

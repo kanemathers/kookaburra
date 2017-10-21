@@ -41,7 +41,7 @@ func (self *Torrent) Files() []*SeekableFile {
 		}
 
 		seekableFile.Reader.SetResponsive()
-		seekableFile.Reader.SetReadahead(5 * 1024 * 1024)
+		seekableFile.Reader.SetReadahead(downloadBuffer)
 
 		seekableFiles[i] = seekableFile
 	}
