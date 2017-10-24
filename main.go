@@ -1,23 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"mime"
-	"net/http"
 	"os"
 	"path"
-	"path/filepath"
-	"strings"
-	"time"
-
-	"github.com/gorilla/mux"
 )
-
-const downloadBuffer = 5 * 1024 * 1024
 
 func main() {
 	httpPort := flag.Int("http", 8080, "Port to bind on for HTTP connections")
@@ -37,17 +26,12 @@ func main() {
 		log.Fatal("no torrent provided")
 	}
 
-	dataDir := path.Join(*workingDir, "kookaburra")
-
-	defer func() {
-		if *cleanup {
-			if err := os.RemoveAll(dataDir); err != nil {
-				log.Printf("cleaning up directory: %s\n", err)
-			}
-		}
-	}()
-
-	client, err := NewClient(dataDir)
+	client, err := NewClient(&ClientConfig{
+		WorkingDir: path.Join(*workingDir, "kookaburra"),
+		Cleanup:    *cleanup,
+		HTTPPort:   *httpPort,
+		Readahead:  5 * 1024 * 1024,
+	})
 
 	if err != nil {
 		log.Fatalf("creating client: %s\n", err)
@@ -63,7 +47,7 @@ func main() {
 		log.Fatalf("fetching torrent: %s", err)
 	}
 
-	router := mux.NewRouter()
+	go client.Render(*playAllFiles)
 
 	if !*playAllFiles {
 		var file *SeekableFile
@@ -95,52 +79,8 @@ func main() {
 			file = torrent.LargestFile()
 		}
 
-		router.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-			http.ServeContent(writer, request, file.DisplayPath(), time.Now(), file)
-		})
+		log.Fatal(client.ServeFile(file))
 	} else {
-		router.HandleFunc("/playlist.m3u", func(writer http.ResponseWriter, request *http.Request) {
-			writer.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-
-			var buffer bytes.Buffer
-
-			buffer.WriteString("#EXTM3U\n")
-
-			for _, file := range torrent.Files() {
-				mimetype := mime.TypeByExtension(filepath.Ext(file.DisplayPath()))
-
-				// Crude method to detect filetypes. We don't want to be serving up NFO documents
-				// or text files, images, etc...
-				//
-				// Would be nice to use http.DetectContentType but that requires we load 512 bytes
-				// of the file before the detection can be performed.
-				if strings.HasPrefix(mimetype, "video/") || strings.HasPrefix(mimetype, "audio/") {
-					buffer.WriteString(fmt.Sprintf("#EXTINFO:0,%s\n", file.DisplayPath()))
-					buffer.WriteString(fmt.Sprintf("http://127.0.0.1:%d/%s\n", *httpPort, file.DisplayPath()))
-				}
-			}
-
-			if _, err := io.Copy(writer, &buffer); err != nil {
-				http.Error(writer, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-
-				return
-			}
-		})
-
-		router.HandleFunc("/{filename}", func(writer http.ResponseWriter, request *http.Request) {
-			for _, file := range torrent.Files() {
-				if file.DisplayPath() == mux.Vars(request)["filename"] {
-					http.ServeContent(writer, request, file.DisplayPath(), time.Now(), file)
-
-					return
-				}
-			}
-
-			http.Error(writer, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		})
+		log.Fatal(client.ServePlaylist())
 	}
-
-	go client.Render(*httpPort, *playAllFiles)
-
-	http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", *httpPort), router)
 }

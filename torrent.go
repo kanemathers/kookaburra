@@ -28,6 +28,8 @@ func (self *SeekableFile) Seek(off int64, whence int) (ret int64, err error) {
 
 type Torrent struct {
 	*torrent.Torrent
+
+	readahead int64
 }
 
 func (self *Torrent) Files() []*SeekableFile {
@@ -41,7 +43,7 @@ func (self *Torrent) Files() []*SeekableFile {
 		}
 
 		seekableFile.Reader.SetResponsive()
-		seekableFile.Reader.SetReadahead(downloadBuffer)
+		seekableFile.Reader.SetReadahead(self.readahead)
 
 		seekableFiles[i] = seekableFile
 	}
