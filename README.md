@@ -1,8 +1,8 @@
 # kookaburra
 
-Stream torrents to the media player of your choice.
+Stream torrents to any media player.
 
-I have been using [popcorntime](https://popcorntime.sh) for a while for its
+I had been using [popcorntime](https://popcorntime.sh) for a while for its
 torrent streaming abilities but it was very bloated for what I was using it
 for. It's an Electron app with a built in torrent browser and media player.
 None of which I needed.
